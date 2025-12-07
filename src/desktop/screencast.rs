@@ -42,7 +42,7 @@ use enumflags2::{bitflags, BitFlags};
 use futures_util::TryFutureExt;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
-use zbus::zvariant::{self, DeserializeDict, SerializeDict, Type, Value};
+use zbus::zvariant::{self, DeserializeDict, OwnedValue, SerializeDict, Type, Value};
 
 use super::{
     remote_desktop::RemoteDesktop, session::SessionPortal, HandleToken, PersistMode, Request,
@@ -110,7 +110,7 @@ struct SelectSourcesOptions {
     multiple: Option<bool>,
     /// Determines how the cursor will be drawn in the screen cast stream.
     cursor_mode: Option<CursorMode>,
-    restore_token: Option<String>,
+    restore_data: Option<(String, u32, OwnedValue)>,
     persist_mode: Option<PersistMode>,
 }
 
@@ -143,8 +143,8 @@ impl SelectSourcesOptions {
     }
 
     #[must_use]
-    pub fn restore_token<'a>(mut self, token: impl Into<Option<&'a str>>) -> Self {
-        self.restore_token = token.into().map(ToOwned::to_owned);
+    pub fn restore_data(mut self, data: Option<(String, u32, impl Into<OwnedValue>)>) -> Self {
+        self.restore_data = data.map(|(s, u, v)| (s, u, v.into()));
         self
     }
 }
@@ -162,13 +162,13 @@ struct StartCastOptions {
 #[zvariant(signature = "dict")]
 pub struct Streams {
     streams: Vec<Stream>,
-    restore_token: Option<String>,
+    restore_data: Option<(String, u32, OwnedValue)>,
 }
 
 impl Streams {
     /// The session restore token.
-    pub fn restore_token(&self) -> Option<&str> {
-        self.restore_token.as_deref()
+    pub fn restore_data(&self) -> Option<&(String, u32, OwnedValue)> {
+        self.restore_data.as_ref()
     }
 
     /// The list of streams.
@@ -180,7 +180,7 @@ impl Streams {
 impl Debug for Streams {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("Streams")
-            .field(&self.restore_token)
+            .field(&self.restore_data)
             .field(&self.streams)
             .finish()
     }
@@ -204,14 +204,17 @@ impl StreamsBuilder {
         Self {
             streams: Streams {
                 streams,
-                restore_token: None,
+                restore_data: None,
             },
         }
     }
 
     /// Set the streams' optional restore token.
-    pub fn restore_token(mut self, restore_token: impl Into<Option<String>>) -> Self {
-        self.streams.restore_token = restore_token.into();
+    pub fn restore_data(
+        mut self,
+        restore_data: Option<(String, u32, impl Into<OwnedValue>)>,
+    ) -> Self {
+        self.streams.restore_data = restore_data.map(|(s, u, v)| (s, u, v.into()));
         self
     }
 
@@ -453,7 +456,7 @@ impl Screencast {
         cursor_mode: CursorMode,
         types: BitFlags<SourceType>,
         multiple: bool,
-        restore_token: Option<&str>,
+        restore_data: Option<(String, u32, OwnedValue)>,
         persist_mode: PersistMode,
     ) -> Result<Request<()>, Error> {
         let options = SelectSourcesOptions::default()
@@ -461,7 +464,7 @@ impl Screencast {
             .multiple(multiple)
             .types(types)
             .persist_mode(persist_mode)
-            .restore_token(restore_token);
+            .restore_data(restore_data);
         self.0
             .empty_request(&options.handle_token, "SelectSources", &(session, &options))
             .await
