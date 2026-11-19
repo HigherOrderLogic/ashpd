@@ -18,6 +18,9 @@ pub mod email;
 #[cfg(feature = "file_chooser")]
 #[cfg_attr(docsrs, doc(cfg(feature = "file_chooser")))]
 pub mod file_chooser;
+#[cfg(feature = "global_shortcuts")]
+#[cfg_attr(docsrs, doc(cfg(feature = "global_shortcuts")))]
+pub mod global_shortcuts;
 pub mod lockdown;
 #[cfg(feature = "documents")]
 #[cfg_attr(docsrs, doc(cfg(feature = "documents")))]

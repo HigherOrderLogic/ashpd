@@ -38,6 +38,10 @@ impl Session {
         HandleToken::try_from(&self.path).unwrap()
     }
 
+    pub fn path(&self) -> &OwnedObjectPath {
+        &self.path
+    }
+
     pub async fn serve(&self, cnx: zbus::Connection) -> zbus::Result<bool> {
         let interface = SessionInterface::new(
             self.path.clone(),

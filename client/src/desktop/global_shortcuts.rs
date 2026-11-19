@@ -16,7 +16,7 @@ use crate::{
     proxy::Proxy,
 };
 
-#[derive(Clone, Serialize, Type, Debug, Default)]
+#[derive(Clone, Serialize, Deserialize, Type, Debug, Default)]
 #[zbus(signature = "dict")]
 struct NewShortcutInfo {
     /// User-readable text describing what the shortcut does.
@@ -24,13 +24,13 @@ struct NewShortcutInfo {
     description: String,
     /// The preferred shortcut trigger, defined as described by the "shortcuts"
     /// XDG specification. Optional.
-    #[serde(with = "optional", skip_serializing_if = "Option::is_none")]
+    #[serde(default, with = "optional", skip_serializing_if = "Option::is_none")]
     preferred_trigger: Option<String>,
 }
 
 /// Shortcut descriptor used to bind new shortcuts in
 /// [`GlobalShortcuts::bind_shortcuts`]
-#[derive(Clone, Serialize, Type, Debug)]
+#[derive(Clone, Serialize, Deserialize, Type, Debug)]
 pub struct NewShortcut(String, NewShortcutInfo);
 
 impl NewShortcut {
@@ -52,9 +52,27 @@ impl NewShortcut {
         self.1.preferred_trigger = preferred_trigger.into().map(ToOwned::to_owned);
         self
     }
+
+    /// Shortcut id.
+    #[cfg(feature = "backend")]
+    pub fn id(&self) -> &str {
+        &self.0
+    }
+
+    /// User-readable text describing what the shortcut does.
+    #[cfg(feature = "backend")]
+    pub fn description(&self) -> &str {
+        &self.1.description
+    }
+
+    /// The preferred shortcut trigger, if any.
+    #[cfg(feature = "backend")]
+    pub fn preferred_trigger_value(&self) -> Option<&str> {
+        self.1.preferred_trigger.as_deref()
+    }
 }
 
-#[derive(Clone, Deserialize, Type, Debug, Default)]
+#[derive(Clone, Serialize, Deserialize, Type, Debug, Default)]
 #[zbus(signature = "dict")]
 struct ShortcutInfo {
     /// User-readable text describing what the shortcut does.
@@ -70,8 +88,26 @@ struct ShortcutInfo {
 ///
 /// If you need to create a new shortcuts, take a look at [`NewShortcut`]
 /// instead.
-#[derive(Clone, Deserialize, Type, Debug)]
+#[derive(Clone, Serialize, Deserialize, Type, Debug)]
 pub struct Shortcut(String, ShortcutInfo);
+
+#[cfg(feature = "backend")]
+impl Shortcut {
+    /// Construct a new shortcut.
+    pub fn new(
+        id: impl Into<String>,
+        description: impl Into<String>,
+        trigger_description: impl Into<String>,
+    ) -> Self {
+        Self(
+            id.into(),
+            ShortcutInfo {
+                description: description.into(),
+                trigger_description: trigger_description.into(),
+            },
+        )
+    }
+}
 
 impl Shortcut {
     /// Shortcut id
@@ -91,17 +127,17 @@ impl Shortcut {
     }
 }
 
-#[derive(Serialize, Type, Debug, Default)]
+#[derive(Serialize, Deserialize, Type, Debug, Default)]
 #[zbus(signature = "dict")]
 /// Specified options for a [`GlobalShortcuts::bind_shortcuts`] request.
 pub struct BindShortcutsOptions {
     /// A string that will be used as the last element of the handle.
-    #[serde(with = "as_variant")]
+    #[serde(with = "as_variant", skip_deserializing)]
     handle_token: HandleToken,
 }
 
 /// A response to a [`GlobalShortcuts::bind_shortcuts`] request.
-#[derive(Deserialize, Type, Debug)]
+#[derive(Serialize, Deserialize, Type, Debug)]
 #[zbus(signature = "dict")]
 pub struct BindShortcuts {
     #[serde(default, with = "as_variant")]
@@ -109,13 +145,19 @@ pub struct BindShortcuts {
 }
 
 impl BindShortcuts {
+    /// Construct a new [`BindShortcuts`] response from the bound shortcuts.
+    #[cfg(feature = "backend")]
+    pub fn new(shortcuts: Vec<Shortcut>) -> Self {
+        Self { shortcuts }
+    }
+
     /// A list of shortcuts.
     pub fn shortcuts(&self) -> &[Shortcut] {
         &self.shortcuts
     }
 }
 
-#[derive(Serialize, Type, Debug, Default)]
+#[derive(Serialize, Deserialize, Type, Debug, Default)]
 #[zbus(signature = "dict")]
 /// Specified options for a [`GlobalShortcuts::configure_shortcuts`] request.
 pub struct ConfigureShortcutsOptions {
@@ -135,17 +177,17 @@ impl ConfigureShortcutsOptions {
     }
 }
 
-#[derive(Serialize, Type, Debug, Default)]
+#[derive(Serialize, Deserialize, Type, Debug, Default)]
 #[zbus(signature = "dict")]
 /// Specified options for a [`GlobalShortcuts::list_shortcuts`] request.
 pub struct ListShortcutsOptions {
     /// A string that will be used as the last element of the handle.
-    #[serde(with = "as_variant")]
+    #[serde(with = "as_variant", skip_deserializing)]
     handle_token: HandleToken,
 }
 
 /// A response to a [`GlobalShortcuts::list_shortcuts`] request.
-#[derive(Deserialize, Type, Debug)]
+#[derive(Serialize, Deserialize, Type, Debug)]
 #[zbus(signature = "dict")]
 pub struct ListShortcuts {
     /// A list of shortcuts.
@@ -154,6 +196,12 @@ pub struct ListShortcuts {
 }
 
 impl ListShortcuts {
+    /// Construct a new [`ListShortcuts`] response from the shortcuts.
+    #[cfg(feature = "backend")]
+    pub fn new(shortcuts: Vec<Shortcut>) -> Self {
+        Self { shortcuts }
+    }
+
     /// A list of shortcuts.
     pub fn shortcuts(&self) -> &[Shortcut] {
         &self.shortcuts

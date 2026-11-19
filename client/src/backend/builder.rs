@@ -22,6 +22,8 @@ pub struct Builder {
     email_impl: Option<Arc<dyn crate::backend::email::EmailImpl>>,
     #[cfg(feature = "file_chooser")]
     file_chooser_impl: Option<Arc<dyn crate::backend::file_chooser::FileChooserImpl>>,
+    #[cfg(feature = "global_shortcuts")]
+    global_shortcuts_impl: Option<Arc<dyn crate::backend::global_shortcuts::GlobalShortcutsImpl>>,
     lockdown_impl: Option<Arc<dyn crate::backend::lockdown::LockdownImpl>>,
     #[cfg(feature = "documents")]
     permission_store_impl: Option<Arc<dyn crate::backend::permission_store::PermissionStoreImpl>>,
@@ -68,6 +70,8 @@ impl Builder {
             email_impl: None,
             #[cfg(feature = "file_chooser")]
             file_chooser_impl: None,
+            #[cfg(feature = "global_shortcuts")]
+            global_shortcuts_impl: None,
             lockdown_impl: None,
 
             #[cfg(feature = "documents")]
@@ -166,6 +170,15 @@ impl Builder {
         imp: impl crate::backend::file_chooser::FileChooserImpl + 'static,
     ) -> Self {
         self.file_chooser_impl = Some(Arc::new(imp));
+        self
+    }
+
+    #[cfg(feature = "global_shortcuts")]
+    pub fn global_shortcuts(
+        mut self,
+        imp: impl crate::backend::global_shortcuts::GlobalShortcutsImpl + 'static,
+    ) -> Self {
+        self.global_shortcuts_impl = Some(Arc::new(imp));
         self
     }
 
@@ -320,6 +333,29 @@ impl Builder {
                 crate::backend::file_chooser::FileChooserInterface::new(imp, inner.clone());
             #[cfg(feature = "tracing")]
             tracing::debug!("Serving interface `org.freedesktop.impl.portal.FileChooser`");
+            object_server
+                .at("/org/freedesktop/portal/desktop", portal)
+                .await?;
+        }
+
+        #[cfg(feature = "global_shortcuts")]
+        if let Some(mut imp) = self.global_shortcuts_impl {
+            let emitter = Arc::new(
+                crate::backend::global_shortcuts::GlobalShortcutsEmitter::new(
+                    inner.clone(),
+                    Arc::clone(&self.sessions),
+                ),
+            );
+            if let Some(imp) = Arc::get_mut(&mut imp) {
+                imp.set_signal_emitter(emitter);
+            }
+            let portal = crate::backend::global_shortcuts::GlobalShortcutsInterface::new(
+                Arc::clone(&imp),
+                inner.clone(),
+                Arc::clone(&self.sessions),
+            );
+            #[cfg(feature = "tracing")]
+            tracing::debug!("Serving interface `org.freedesktop.impl.portal.GlobalShortcuts`");
             object_server
                 .at("/org/freedesktop/portal/desktop", portal)
                 .await?;
